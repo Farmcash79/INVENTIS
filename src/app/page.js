@@ -1,66 +1,160 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+'use client';
 
-export default function Home() {
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import styles from './page.module.css';
+
+export default function SignUp() {
+  const router = useRouter();
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+  });
+  const [selectedRole, setSelectedRole] = useState('owner');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          role: selectedRole,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Sign up failed');
+        setIsLoading(false);
+        return;
+      }
+
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+
+      if (selectedRole === 'owner') {
+        router.push('/dashboard');
+      } else {
+        router.push('/stock-control');
+      }
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.js file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className={styles.authContainer}>
+      <div className={styles.authCard}>
+        <div className={styles.authHeader}>
+          <div className={styles.authTitle}>
+            <span className={styles.welcome}>WELCOME TO</span>
+            <span className={styles.brand}>INVENTIS</span>
+          </div>
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+
+        <h2 className={styles.formTitle}>SIGN-UP</h2>
+
+        {error && <div className={styles.errorMessage}>{error}</div>}
+
+        <form onSubmit={handleSubmit}>
+          <div className={styles.formGroup}>
+            <input
+              type="text"
+              name="name"
+              placeholder="Name"
+              value={formData.name}
+              onChange={handleInputChange}
+              className={styles.formInput}
+              required
             />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          </div>
+
+          <div className={styles.formGroup}>
+            <input
+              type="email"
+              name="email"
+              placeholder="Email"
+              value={formData.email}
+              onChange={handleInputChange}
+              className={styles.formInput}
+              required
+            />
+          </div>
+
+          <div className={styles.formGroup}>
+            <input
+              type="password"
+              name="password"
+              placeholder="Password"
+              value={formData.password}
+              onChange={handleInputChange}
+              className={styles.formInput}
+              required
+            />
+          </div>
+
+          <div className={styles.roleSection}>
+            <p className={styles.roleLabel}>Account status:</p>
+            <div className={styles.roleSelector}>
+              <button
+                type="button"
+                className={`${styles.roleButton} ${
+                  selectedRole === 'owner' ? styles.active : ''
+                }`}
+                onClick={() => setSelectedRole('owner')}
+              >
+                Owner
+              </button>
+              <span className={styles.orLabel}>OR</span>
+              <button
+                type="button"
+                className={`${styles.roleButton} ${
+                  selectedRole === 'sales_rep' ? styles.active : ''
+                } ${selectedRole === 'sales_rep' ? styles.salesRep : ''}`}
+                onClick={() => setSelectedRole('sales_rep')}
+              >
+                Sales Rep
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className={styles.submitButton}
+            disabled={isLoading}
           >
-            Documentation
-          </a>
+            {isLoading ? (
+              <span className={styles.loadingSpinner}></span>
+            ) : (
+              'SIGN-UP'
+            )}
+          </button>
+        </form>
+
+        <div className={styles.authLink}>
+          Already have an account?{' '}
+          <Link href="/signin">Sign In</Link>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

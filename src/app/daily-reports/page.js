@@ -1,0 +1,336 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { storage, getSummaryData } from '@/lib/storage';
+import ProtectedRoute from '@/components/ProtectedRoute';
+
+const pageStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '24px',
+};
+
+const headerContainerStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '8px',
+};
+
+const titleStyle = {
+  fontSize: '24px',
+  color: 'var(--text-primary)',
+  fontWeight: 700,
+};
+
+const subtitleStyle = {
+  fontSize: '13px',
+  color: 'var(--text-muted)',
+  fontWeight: 500,
+};
+
+const dashboardStyle = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 1fr 1fr',
+  gap: '20px',
+  marginBottom: '12px',
+};
+
+const kpiCardStyle = {
+  background: 'var(--card-bg)',
+  border: '1px solid var(--border-color)',
+  borderRadius: '8px',
+  padding: '24px',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '8px',
+};
+
+const kpiLabelStyle = {
+  fontSize: '12px',
+  color: 'var(--text-muted)',
+  fontWeight: 600,
+  letterSpacing: '0.5px',
+};
+
+const kpiValueStyle = {
+  fontSize: '28px',
+  color: 'var(--primary-gold)',
+  fontWeight: 700,
+};
+
+const mainContentStyle = {
+  display: 'grid',
+  gridTemplateColumns: '3fr 1fr',
+  gap: '20px',
+};
+
+const tableContainerStyle = {
+  background: 'var(--card-bg)',
+  border: '1px solid var(--border-color)',
+  borderRadius: '8px',
+  overflow: 'hidden',
+};
+
+const tableHeaderStyle = {
+  padding: '20px 24px',
+  borderBottom: '1px solid var(--border-color)',
+};
+
+const tableTitleStyle = {
+  fontSize: '16px',
+  color: 'var(--text-primary)',
+  fontWeight: 700,
+};
+
+const tableStyle = {
+  width: '100%',
+  borderCollapse: 'collapse',
+};
+
+const tableHeadRowStyle = {
+  background: 'var(--primary-dark)',
+  borderBottom: '1px solid var(--border-color)',
+};
+
+const tableHeadCellStyle = {
+  padding: '16px 24px',
+  textAlign: 'left',
+  fontSize: '12px',
+  color: 'var(--text-muted)',
+  fontWeight: 600,
+  letterSpacing: '0.5px',
+};
+
+const tableBodyCellStyle = {
+  padding: '16px 24px',
+  fontSize: '14px',
+  color: 'var(--text-primary)',
+  borderBottom: '1px solid var(--border-color)',
+};
+
+const statusHighStyle = {
+  ...tableBodyCellStyle,
+  backgroundColor: 'rgba(0, 204, 0, 0.1)',
+  color: 'var(--status-success)',
+  fontWeight: 600,
+};
+
+const statusMediumStyle = {
+  ...tableBodyCellStyle,
+  backgroundColor: 'rgba(255, 184, 28, 0.1)',
+  color: 'var(--status-warning)',
+  fontWeight: 600,
+};
+
+const statusLowStyle = {
+  ...tableBodyCellStyle,
+  backgroundColor: 'rgba(255, 51, 51, 0.1)',
+  color: 'var(--status-danger)',
+  fontWeight: 600,
+};
+
+const widgetStyle = {
+  background: 'var(--card-bg)',
+  border: '1px solid var(--border-color)',
+  borderRadius: '8px',
+  padding: '24px',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '16px',
+};
+
+const widgetTitleStyle = {
+  fontSize: '16px',
+  color: 'var(--text-primary)',
+  fontWeight: 700,
+};
+
+const widgetValueStyle = {
+  fontSize: '24px',
+  color: 'var(--primary-gold)',
+  fontWeight: 700,
+  textAlign: 'center',
+  padding: '16px',
+};
+
+const widgetListStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '12px',
+};
+
+const widgetItemStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '12px',
+  background: 'var(--primary-dark)',
+  borderRadius: '6px',
+  border: '1px solid var(--border-color)',
+};
+
+const widgetItemNameStyle = {
+  fontSize: '13px',
+  color: 'var(--text-primary)',
+  fontWeight: 600,
+};
+
+const widgetItemValueStyle = {
+  fontSize: '13px',
+  color: 'var(--primary-gold)',
+  fontWeight: 700,
+};
+
+const getStatusStyle = (status) => {
+  switch (status) {
+    case 'high':
+      return statusHighStyle;
+    case 'medium':
+      return statusMediumStyle;
+    case 'low':
+      return statusLowStyle;
+    default:
+      return tableBodyCellStyle;
+  }
+};
+
+const getStatusDisplay = (status) => {
+  switch (status) {
+    case 'high':
+      return '● High';
+    case 'medium':
+      return '● Medium';
+    case 'low':
+      return '● Low';
+    default:
+      return '● Unknown';
+  }
+};
+
+export default function DailyReportsPage() {
+  const [reports, setReports] = useState([]);
+  const [products, setProducts] = useState([]);
+  const summaryData = getSummaryData();
+
+  useEffect(() => {
+    const allReports = storage.dailyReports.getAll();
+    const allProducts = storage.products.getAll();
+    setReports(allReports);
+    setProducts(allProducts);
+  }, []);
+
+  const topSellingProducts = products
+    .slice()
+    .sort((a, b) => {
+      const aSold = parseInt(a.stockSold.replace(/\D/g, ''), 10);
+      const bSold = parseInt(b.stockSold.replace(/\D/g, ''), 10);
+      return bSold - aSold;
+    })
+    .slice(0, 5);
+
+  return (
+    <ProtectedRoute requiredRole="owner">
+      <div style={pageStyle}>
+        {/* Header */}
+        <div style={headerContainerStyle}>
+          <h1 style={titleStyle}>Daily Reports</h1>
+          <p style={subtitleStyle}>Full daily summary · Revenue, profit & top sellers</p>
+        </div>
+
+        {/* KPI Cards */}
+        <div style={dashboardStyle}>
+          <div style={kpiCardStyle}>
+            <div style={kpiLabelStyle}>TOTAL REVENUE</div>
+            <div style={kpiValueStyle}>{summaryData.totalRevenue}</div>
+          </div>
+          <div style={kpiCardStyle}>
+            <div style={kpiLabelStyle}>TOTAL EXPENSES</div>
+            <div style={kpiValueStyle}>{summaryData.totalExpenses}</div>
+          </div>
+          <div style={kpiCardStyle}>
+            <div style={kpiLabelStyle}>GROSS PROFIT</div>
+            <div style={kpiValueStyle}>{summaryData.grossProfit}</div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div style={mainContentStyle}>
+          {/* Daily Reports Table */}
+          <div style={tableContainerStyle}>
+            <div style={tableHeaderStyle}>
+              <div style={tableTitleStyle}>Daily Metrics</div>
+            </div>
+            <table style={tableStyle}>
+              <thead style={tableHeadRowStyle}>
+                <tr>
+                  <th style={tableHeadCellStyle}>Product</th>
+                  <th style={tableHeadCellStyle}>Category</th>
+                  <th style={tableHeadCellStyle}>Buy</th>
+                  <th style={tableHeadCellStyle}>Sell</th>
+                  <th style={tableHeadCellStyle}>Stock Sold</th>
+                  <th style={tableHeadCellStyle}>Profit</th>
+                  <th style={tableHeadCellStyle}>Status</th>
+                  <th style={tableHeadCellStyle}>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reports.length > 0 ? (
+                  reports.map((report) => (
+                    <tr key={report.id}>
+                      <td style={tableBodyCellStyle}>{report.product}</td>
+                      <td style={tableBodyCellStyle}>{report.category}</td>
+                      <td style={tableBodyCellStyle}>{report.buy}</td>
+                      <td style={tableBodyCellStyle}>{report.sell}</td>
+                      <td style={tableBodyCellStyle}>{report.stockSold}</td>
+                      <td style={tableBodyCellStyle}>{report.profit}</td>
+                      <td style={getStatusStyle(report.status)}>
+                        {getStatusDisplay(report.status)}
+                      </td>
+                      <td style={tableBodyCellStyle}>{report.date}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="8" style={{...tableBodyCellStyle, textAlign: 'center'}}>
+                      No daily reports available
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Right Sidebar Widgets */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* Business Capital Widget */}
+            <div style={widgetStyle}>
+              <div style={widgetTitleStyle}>Business Capital</div>
+              <div style={widgetValueStyle}>$800K</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                Current capital allocation
+              </div>
+            </div>
+
+            {/* Top Selling Products Widget */}
+            <div style={widgetStyle}>
+              <div style={widgetTitleStyle}>Top Selling Products</div>
+              <div style={widgetListStyle}>
+                {topSellingProducts.map((product, index) => (
+                  <div key={product.id} style={widgetItemStyle}>
+                    <div>
+                      <div style={widgetItemNameStyle}>{index + 1}. {product.name}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        {product.stockSold} sold
+                      </div>
+                    </div>
+                    <div style={widgetItemValueStyle}>{product.profit}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </ProtectedRoute>
+  );
+}
