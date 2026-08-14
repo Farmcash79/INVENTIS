@@ -12,7 +12,7 @@ export async function GET(request) {
       );
     }
 
-    const receipts = storage.eReceipts.getAll();
+    const receipts = await storage.eReceipts.getAll();
     return Response.json({
       success: true,
       data: receipts,
@@ -69,7 +69,7 @@ export async function POST(request) {
       }
     }
 
-    const receipt = storage.eReceipts.create({
+    const receipt = await storage.eReceipts.create({
       ...receiptData,
       createdBy: user.userId,
       createdByRole: user.role,

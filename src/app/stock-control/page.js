@@ -146,6 +146,12 @@ const formGridStyle = {
   marginBottom: '20px',
 };
 
+// Layout adjustments when Unit Price field is hidden for reps
+const salesFormGridStyle = {
+  ...formGridStyle,
+  gridTemplateColumns: '2fr 1fr 1fr',
+};
+
 const formGroupStyle = {
   display: 'flex',
   flexDirection: 'column',
@@ -223,6 +229,7 @@ export default function StockControlPage() {
   const [stockItems, setStockItems] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showForm, setShowForm] = useState(false);
+  const [userRole, setUserRole] = useState('sales'); // Fallback default role
   const [formData, setFormData] = useState({
     product: '',
     category: '',
@@ -231,9 +238,24 @@ export default function StockControlPage() {
   });
 
   useEffect(() => {
+    // 1. Fetch items from local storage simulation
     const items = storage.stockControl.getAll();
     setStockItems(items);
+
+    // 2. Safely get user role context from active authentication storage
+    // Modifying this based on your JWT setup structure
+    try {
+      const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+        if (parsed.role) setUserRole(parsed.role);
+      }
+    } catch (e) {
+      console.error('Could not load user role context', e);
+    }
   }, []);
+
+  const isOwner = userRole === 'owner';
 
   const filteredItems = selectedCategory === 'All'
     ? stockItems
@@ -251,13 +273,16 @@ export default function StockControlPage() {
   };
 
   const handleSubmit = () => {
-    if (formData.product && formData.category && formData.quantity && formData.unitPrice) {
+    // Sales reps input default values for price dynamically if field is missing to keep the storage layer consistent
+    const finalUnitPrice = isOwner ? parseInt(formData.unitPrice) : 0;
+
+    if (formData.product && formData.category && formData.quantity && (isOwner ? formData.unitPrice : true)) {
       const newItem = storage.stockControl.create({
         product: formData.product,
         category: formData.category,
         quantity: parseInt(formData.quantity),
-        unitPrice: parseInt(formData.unitPrice),
-        totalPrice: parseInt(formData.quantity) * parseInt(formData.unitPrice),
+        unitPrice: finalUnitPrice,
+        totalPrice: parseInt(formData.quantity) * finalUnitPrice,
       });
       setStockItems([...stockItems, newItem]);
       setFormData({ product: '', category: '', quantity: '', unitPrice: '' });
@@ -266,7 +291,8 @@ export default function StockControlPage() {
   };
 
   return (
-    <ProtectedRoute requiredRole="owner">
+    /* Open the guard up so both authorized profiles bypass the system routing wall */
+    <ProtectedRoute allowedRoles={['owner', 'sales']}>
       <div style={pageStyle}>
         {/* Header */}
         <div style={headerStyle}>
@@ -314,7 +340,7 @@ export default function StockControlPage() {
         {showForm && (
           <div style={formContainerStyle}>
             <div style={formTitleStyle}>Add New Stock Entry</div>
-            <div style={formGridStyle}>
+            <div style={isOwner ? formGridStyle : salesFormGridStyle}>
               <div style={formGroupStyle}>
                 <label style={formLabelStyle}>Product Name</label>
                 <input
@@ -323,8 +349,6 @@ export default function StockControlPage() {
                   placeholder="Enter product name"
                   value={formData.product}
                   onChange={(e) => handleFormChange('product', e.target.value)}
-                  onFocus={(e) => e.target.style.borderColor = 'var(--primary-gold)'}
-                  onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
                 />
               </div>
               <div style={formGroupStyle}>
@@ -333,8 +357,6 @@ export default function StockControlPage() {
                   style={formInputStyle}
                   value={formData.category}
                   onChange={(e) => handleFormChange('category', e.target.value)}
-                  onFocus={(e) => e.target.style.borderColor = 'var(--primary-gold)'}
-                  onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
                 >
                   <option value="">Select category</option>
                   {categories.filter(c => c !== 'All').map(cat => (
@@ -350,22 +372,21 @@ export default function StockControlPage() {
                   placeholder="0"
                   value={formData.quantity}
                   onChange={(e) => handleFormChange('quantity', e.target.value)}
-                  onFocus={(e) => e.target.style.borderColor = 'var(--primary-gold)'}
-                  onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
                 />
               </div>
-              <div style={formGroupStyle}>
-                <label style={formLabelStyle}>Unit Price</label>
-                <input
-                  style={formInputStyle}
-                  type="number"
-                  placeholder="0"
-                  value={formData.unitPrice}
-                  onChange={(e) => handleFormChange('unitPrice', e.target.value)}
-                  onFocus={(e) => e.target.style.borderColor = 'var(--primary-gold)'}
-                  onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
-                />
-              </div>
+              {/* Financial input conditionally rendered only for owners */}
+              {isOwner && (
+                <div style={formGroupStyle}>
+                  <label style={formLabelStyle}>Unit Price</label>
+                  <input
+                    style={formInputStyle}
+                    type="number"
+                    placeholder="0"
+                    value={formData.unitPrice}
+                    onChange={(e) => handleFormChange('unitPrice', e.target.value)}
+                  />
+                </div>
+              )}
             </div>
             <div style={formButtonsStyle}>
               <button
@@ -374,16 +395,12 @@ export default function StockControlPage() {
                   setShowForm(false);
                   setFormData({ product: '', category: '', quantity: '', unitPrice: '' });
                 }}
-                onMouseEnter={(e) => e.target.style.opacity = '0.8'}
-                onMouseLeave={(e) => e.target.style.opacity = '1'}
               >
                 Cancel
               </button>
               <button
                 style={submitButtonStyle}
                 onClick={handleSubmit}
-                onMouseEnter={(e) => e.target.style.opacity = '0.9'}
-                onMouseLeave={(e) => e.target.style.opacity = '1'}
               >
                 Add Entry
               </button>
@@ -402,8 +419,8 @@ export default function StockControlPage() {
                 <th style={tableHeadCellStyle}>Product</th>
                 <th style={tableHeadCellStyle}>Category</th>
                 <th style={tableHeadCellStyle}>Quantity</th>
-                <th style={tableHeadCellStyle}>Unit Price</th>
-                <th style={tableHeadCellStyle}>Total Price</th>
+                {isOwner && <th style={tableHeadCellStyle}>Unit Price</th>}
+                {isOwner && <th style={tableHeadCellStyle}>Total Price</th>}
                 <th style={tableHeadCellStyle}>Date</th>
                 <th style={tableHeadCellStyle}>Status</th>
               </tr>
@@ -416,8 +433,8 @@ export default function StockControlPage() {
                     <td style={tableBodyCellStyle}>{item.product}</td>
                     <td style={tableBodyCellStyle}>{item.category}</td>
                     <td style={tableBodyCellStyle}>{item.quantity}</td>
-                    <td style={tableBodyCellStyle}>${item.unitPrice}</td>
-                    <td style={tableBodyCellStyle}>${item.totalPrice}</td>
+                    {isOwner && <td style={tableBodyCellStyle}>${item.unitPrice}</td>}
+                    {isOwner && <td style={tableBodyCellStyle}>${item.totalPrice}</td>}
                     <td style={tableBodyCellStyle}>
                       {new Date(item.date).toLocaleDateString()}
                     </td>

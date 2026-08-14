@@ -3,6 +3,24 @@ import bcrypt from 'bcryptjs';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
+export const normalizeRole = (role) => {
+  if (!role) {
+    return null;
+  }
+
+  const normalized = String(role).trim().toLowerCase();
+
+  if (['sales', 'sales_rep', 'sales-rep', 'sales rep'].includes(normalized)) {
+    return 'sales_rep';
+  }
+
+  if (normalized === 'owner') {
+    return 'owner';
+  }
+
+  return null;
+};
+
 export const generateToken = (userId, role) => {
   return jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: '7d' });
 };

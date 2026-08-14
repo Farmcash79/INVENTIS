@@ -90,21 +90,11 @@ const formInputStyle = {
   transition: 'all 0.3s ease',
 };
 
-const itemGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(4, 1fr)',
-  gap: '12px',
-  marginBottom: '20px',
-  padding: '16px',
-  background: 'var(--primary-dark)',
-  borderRadius: '6px',
-  border: '1px solid var(--border-color)',
-};
-
 const itemInputStyle = {
   ...formInputStyle,
   padding: '8px',
   fontSize: '13px',
+  width: '100%',
 };
 
 const itemsContainerStyle = {
@@ -112,13 +102,13 @@ const itemsContainerStyle = {
   flexDirection: 'column',
   gap: '12px',
   marginBottom: '20px',
-  maxHeight: '300px',
+  maxHeight: '250px',
   overflowY: 'auto',
 };
 
 const itemRowStyle = {
   display: 'grid',
-  gridTemplateColumns: '80px 1fr 100px 80px',
+  gridTemplateColumns: '60px 1fr 120px 90px 120px',
   gap: '12px',
   padding: '12px',
   background: 'var(--primary-dark)',
@@ -183,6 +173,42 @@ const removeButtonStyle = {
   transition: 'all 0.3s ease',
 };
 
+const editButtonStyle = {
+  padding: '4px 8px',
+  background: 'transparent',
+  color: 'var(--primary-gold)',
+  border: '1px solid var(--primary-gold)',
+  borderRadius: '4px',
+  fontSize: '12px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  transition: 'all 0.3s ease',
+};
+
+const saveButtonStyle = {
+  padding: '4px 8px',
+  background: 'var(--primary-gold)',
+  color: 'var(--dark-bg)',
+  border: 'none',
+  borderRadius: '4px',
+  fontSize: '12px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  transition: 'all 0.3s ease',
+};
+
+const cancelButtonStyle = {
+  padding: '4px 8px',
+  background: 'transparent',
+  color: 'var(--text-secondary)',
+  border: '1px solid var(--border-color)',
+  borderRadius: '4px',
+  fontSize: '12px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  transition: 'all 0.3s ease',
+};
+
 const generateButtonStyle = {
   padding: '10px 24px',
   background: 'var(--primary-gold)',
@@ -205,6 +231,9 @@ export default function EReceiptPage() {
   const [newItems, setNewItems] = useState([{ id: Date.now(), qty: '', description: '', category: '', amount: '' }]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editingItemData, setEditingItemData] = useState({ qty: '', description: '', category: '', unitAmount: '' });
+
   const handleAddItemField = () => {
     setNewItems([...newItems, { id: Date.now(), qty: '', description: '', category: '', amount: '' }]);
   };
@@ -222,14 +251,14 @@ export default function EReceiptPage() {
   const handleAddItem = (newItem) => {
     if (newItem.qty && newItem.description && newItem.category && newItem.amount) {
       const item = {
-        id: Date.now(),
+        id: Date.now() + Math.random(),
         qty: parseInt(newItem.qty),
         description: newItem.description,
         category: newItem.category,
         unitAmount: parseFloat(newItem.amount),
         total: parseInt(newItem.qty) * parseFloat(newItem.amount),
       };
-      setItems([...items, item]);
+      setItems(prevItems => [...prevItems, item]);
       return true;
     }
     return false;
@@ -237,6 +266,41 @@ export default function EReceiptPage() {
 
   const handleRemoveItem = (itemId) => {
     setItems(items.filter(item => item.id !== itemId));
+    if (editingItemId === itemId) {
+      setEditingItemId(null);
+    }
+  };
+
+  const startEditingItem = (item) => {
+    setEditingItemId(item.id);
+    setEditingItemData({
+      qty: String(item.qty),
+      description: item.description,
+      category: item.category,
+      unitAmount: String(item.unitAmount),
+    });
+  };
+
+  const handleSaveEditedItem = (id) => {
+    if (editingItemData.qty && editingItemData.description && editingItemData.category && editingItemData.unitAmount) {
+      const updatedQty = parseInt(editingItemData.qty) || 0;
+      const updatedAmount = parseFloat(editingItemData.unitAmount) || 0;
+
+      setItems(items.map(item => {
+        if (item.id === id) {
+          return {
+            ...item,
+            qty: updatedQty,
+            description: editingItemData.description,
+            category: editingItemData.category,
+            unitAmount: updatedAmount,
+            total: updatedQty * updatedAmount,
+          };
+        }
+        return item;
+      }));
+      setEditingItemId(null);
+    }
   };
 
   const calculateTotal = () => {
@@ -256,10 +320,8 @@ export default function EReceiptPage() {
           createdAt: new Date(),
         };
         
-        // Create receipt in storage
         storage.eReceipts.create(receipt);
 
-        // Send to WhatsApp
         const whatsappResponse = await fetch('/api/whatsapp/send-receipt', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -277,11 +339,11 @@ export default function EReceiptPage() {
           alert('E-Receipt generated but failed to send WhatsApp. You can send it manually.');
         }
 
-        // Reset form
         setCustomerName('');
         setCustomerWhatsApp('');
         setItems([]);
         setNewItems([{ id: Date.now(), qty: '', description: '', category: '', amount: '' }]);
+        setEditingItemId(null);
       } catch (error) {
         alert('E-Receipt generated but error sending WhatsApp. Please try again.');
         console.error('Error:', error);
@@ -304,24 +366,8 @@ export default function EReceiptPage() {
           {categories.map((category) => (
             <button
               key={category}
-              style={
-                selectedCategory === category
-                  ? filterButtonActiveStyle
-                  : filterButtonStyle
-              }
+              style={selectedCategory === category ? filterButtonActiveStyle : filterButtonStyle}
               onClick={() => setSelectedCategory(category)}
-              onMouseEnter={(e) => {
-                if (selectedCategory !== category) {
-                  e.target.style.borderColor = 'var(--primary-gold)';
-                  e.target.style.color = 'var(--primary-gold)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (selectedCategory !== category) {
-                  e.target.style.borderColor = 'var(--border-color)';
-                  e.target.style.color = 'var(--text-secondary)';
-                }
-              }}
             >
               {category}
             </button>
@@ -342,8 +388,6 @@ export default function EReceiptPage() {
                 placeholder="Enter customer name"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
-                onFocus={(e) => e.target.style.borderColor = 'var(--primary-gold)'}
-                onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
               />
             </div>
             <div style={formGroupStyle}>
@@ -354,49 +398,88 @@ export default function EReceiptPage() {
                 placeholder="Enter WhatsApp number"
                 value={customerWhatsApp}
                 onChange={(e) => setCustomerWhatsApp(e.target.value)}
-                onFocus={(e) => e.target.style.borderColor = 'var(--primary-gold)'}
-                onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
               />
             </div>
           </div>
 
-          {/* Items Section - Dynamic Form */}
-          <div style={{ marginBottom: '20px' }}>
-            <div style={formLabelStyle} className="mb-2">Add Items</div>
-            
-            {/* Added Items Display */}
-            {items.length > 0 && (
-              <div style={{ ...itemsContainerStyle, marginBottom: '20px', maxHeight: '200px' }}>
+          {/* SECTION 1: ADDED ITEMS PREVIEW DISPLAY (MOVED ABOVE INPUTS) */}
+          {items.length > 0 && (
+            <div style={{ marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px dashed var(--border-color)' }}>
+              <div style={{ ...formLabelStyle, marginBottom: '10px', color: 'var(--primary-gold)' }}>
+                Added Items List ({items.length})
+              </div>
+              <div style={itemsContainerStyle}>
                 {items.map((item) => (
                   <div key={item.id} style={itemRowStyle}>
-                    <div style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>
-                      {item.qty}x
-                    </div>
-                    <div>
-                      <div style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>
-                        {item.description}
-                      </div>
-                      <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
-                        {item.category} • ${item.unitAmount}
-                      </div>
-                    </div>
-                    <div style={{ color: 'var(--primary-gold)', fontSize: '13px', fontWeight: 700 }}>
-                      ${item.total.toFixed(2)}
-                    </div>
-                    <button
-                      style={removeButtonStyle}
-                      onClick={() => handleRemoveItem(item.id)}
-                      onMouseEnter={(e) => e.target.style.opacity = '0.8'}
-                      onMouseLeave={(e) => e.target.style.opacity = '1'}
-                    >
-                      Remove
-                    </button>
+                    {editingItemId === item.id ? (
+                      <>
+                        <input
+                          type="number"
+                          style={itemInputStyle}
+                          value={editingItemData.qty}
+                          onChange={(e) => setEditingItemData({ ...editingItemData, qty: e.target.value })}
+                        />
+                        <input
+                          type="text"
+                          style={itemInputStyle}
+                          value={editingItemData.description}
+                          onChange={(e) => setEditingItemData({ ...editingItemData, description: e.target.value })}
+                        />
+                        <select
+                          style={itemInputStyle}
+                          value={editingItemData.category}
+                          onChange={(e) => setEditingItemData({ ...editingItemData, category: e.target.value })}
+                        >
+                          {categories.filter(c => c !== 'All').map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          step="0.01"
+                          style={itemInputStyle}
+                          value={editingItemData.unitAmount}
+                          onChange={(e) => setEditingItemData({ ...editingItemData, unitAmount: e.target.value })}
+                        />
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button style={saveButtonStyle} onClick={() => handleSaveEditedItem(item.id)}>Save</button>
+                          <button style={cancelButtonStyle} onClick={() => setEditingItemId(null)}>Cancel</button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>
+                          {item.qty}x
+                        </div>
+                        <div>
+                          <div style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>
+                            {item.description}
+                          </div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
+                            {item.category} • ${item.unitAmount}
+                          </div>
+                        </div>
+                        <div style={{ color: 'var(--primary-gold)', fontSize: '13px', fontWeight: 700 }}>
+                          ${item.total.toFixed(2)}
+                        </div>
+                        <div>
+                          <button style={editButtonStyle} onClick={() => startEditingItem(item)}>Edit</button>
+                        </div>
+                        <div>
+                          <button style={removeButtonStyle} onClick={() => handleRemoveItem(item.id)}>Remove</button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
-            )}
+            </div>
+          )}
 
-            {/* New Item Entry Fields */}
+          {/* SECTION 2: NEW ITEM DATA ENTRY FIELDS */}
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ ...formLabelStyle, marginBottom: '10px' }}>Add New Items Below</div>
+            
             <div style={{ ...itemsContainerStyle, maxHeight: '400px', marginBottom: '20px' }}>
               {newItems.map((newItem) => (
                 <div key={newItem.id} style={{
@@ -456,9 +539,6 @@ export default function EReceiptPage() {
                     <button
                       style={{...removeButtonStyle, padding: '4px 6px', fontSize: '11px'}}
                       onClick={() => handleRemoveItemField(newItem.id)}
-                      onMouseEnter={(e) => e.target.style.opacity = '0.8'}
-                      onMouseLeave={(e) => e.target.style.opacity = '1'}
-                      title="Remove this field"
                     >
                       ✕
                     </button>
@@ -471,8 +551,6 @@ export default function EReceiptPage() {
               <button
                 style={{...addButtonStyle, flex: 1}}
                 onClick={handleAddItemField}
-                onMouseEnter={(e) => e.target.style.opacity = '0.8'}
-                onMouseLeave={(e) => e.target.style.opacity = '1'}
               >
                 + Add New Field
               </button>
@@ -486,14 +564,10 @@ export default function EReceiptPage() {
                 }}
                 onClick={() => {
                   newItems.forEach(newItem => {
-                    if (handleAddItem(newItem)) {
-                      // Item was added
-                    }
+                    handleAddItem(newItem);
                   });
                   setNewItems([{ id: Date.now(), qty: '', description: '', category: '', amount: '' }]);
                 }}
-                onMouseEnter={(e) => e.target.style.opacity = '0.9'}
-                onMouseLeave={(e) => e.target.style.opacity = '1'}
               >
                 ✓ Add All Items
               </button>
@@ -513,13 +587,7 @@ export default function EReceiptPage() {
             <button
               style={generateButtonStyle}
               onClick={handleGenerateReceipt}
-              disabled={!customerName || !customerWhatsApp || items.length === 0}
-              onMouseEnter={(e) => {
-                if (customerName && customerWhatsApp && items.length > 0) {
-                  e.target.style.opacity = '0.9';
-                }
-              }}
-              onMouseLeave={(e) => e.target.style.opacity = '1'}
+              disabled={!customerName || !customerWhatsApp || items.length === 0 || editingItemId !== null}
             >
               Generate Receipt
             </button>

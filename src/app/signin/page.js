@@ -7,8 +7,8 @@ import styles from './page.module.css';
 
 export default function SignIn() {
   const router = useRouter();
-  const [role, setRole] = useState('owner');
-  const [email, setEmail] = useState('owner@example.com');
+  const [role, setRole] = useState('owner'); // Initial state role
+  const [email, setEmail] = useState('');    // Cleared hardcoded fallback string
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,7 +27,7 @@ export default function SignIn() {
         body: JSON.stringify({
           email,
           password,
-          role,
+          role, // This will cleanly send 'owner' or 'sales' to your backend API
         }),
       });
 
@@ -42,10 +42,11 @@ export default function SignIn() {
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
 
+      // Redirect pathways based on the canonical user role
       if (role === 'owner') {
         router.push('/dashboard');
       } else {
-        router.push('/dashboard');
+        router.push('/sales-rep/stock-control');
       }
     } catch (err) {
       setError('An error occurred. Please try again.');
@@ -66,12 +67,14 @@ export default function SignIn() {
 
         <div className={styles.roleButtons}>
           <button
+            type="button"
             className={`${styles.roleButton} ${role === 'owner' ? styles.active : ''}`}
             onClick={() => setRole('owner')}
           >
             Owner
           </button>
           <button
+            type="button"
             className={`${styles.roleButton} ${role === 'sales_rep' ? styles.active : ''}`}
             onClick={() => setRole('sales_rep')}
           >

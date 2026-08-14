@@ -1,19 +1,20 @@
 import { storage } from '@/lib/storage';
-import { hashPassword, generateToken } from '@/lib/auth';
+import { hashPassword, generateToken, normalizeRole } from '@/lib/auth';
 
 export async function POST(request) {
   try {
     const { name, email, password, role } = await request.json();
+    const normalizedRole = normalizeRole(role);
 
     // Validation
-    if (!name || !email || !password || !role) {
+    if (!name || !email || !password || !normalizedRole) {
       return Response.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    if (role !== 'owner' && role !== 'sales_rep') {
+    if (normalizedRole !== 'owner' && normalizedRole !== 'sales') {
       return Response.json(
         { error: 'Invalid role' },
         { status: 400 }
@@ -21,7 +22,7 @@ export async function POST(request) {
     }
 
     // Check if user exists
-    const existingUser = storage.users.getByEmail(email);
+    const existingUser = await storage.users.getByEmail(email);
     if (existingUser) {
       return Response.json(
         { error: 'Email already registered' },
@@ -33,15 +34,15 @@ export async function POST(request) {
     const passwordHash = await hashPassword(password);
 
     // Create user
-    const user = storage.users.create({
+    const user = await storage.users.create({
       name,
       email,
       passwordHash,
-      role,
+      role: normalizedRole,
     });
 
     // Generate token
-    const token = generateToken(user.id, user.role);
+    const token = generateToken(user.id, normalizedRole);
 
     // Return user data (without password)
     return Response.json({
@@ -51,10 +52,11 @@ export async function POST(request) {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role,
+        role: normalizedRole,
       },
     });
   } catch (error) {
+    console.error('Signup route failed:', error);
     return Response.json(
       { error: 'Server error' },
       { status: 500 }

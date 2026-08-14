@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { normalizeRole } from '@/lib/auth';
 
 export default function ProtectedRoute({
   children,
@@ -22,10 +23,14 @@ export default function ProtectedRoute({
       }
 
       const userData = JSON.parse(user);
+      const userRole = normalizeRole(userData.role);
 
       if (requiredRole) {
-        const allowedRoles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
-        if (!allowedRoles.includes(userData.role)) {
+        const allowedRoles = (Array.isArray(requiredRole) ? requiredRole : [requiredRole])
+          .map((role) => normalizeRole(role))
+          .filter(Boolean);
+
+        if (!allowedRoles.includes(userRole)) {
           router.push('/unauthorized');
           return;
         }

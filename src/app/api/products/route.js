@@ -12,7 +12,7 @@ export async function GET(request) {
       );
     }
 
-    const products = storage.products.getAll();
+    const products = await storage.products.getAll();
     return Response.json({
       success: true,
       data: products,
@@ -45,7 +45,7 @@ export async function POST(request) {
     }
 
     const productData = await request.json();
-    const product = storage.products.create(productData);
+    const product = await storage.products.create(productData);
 
     return Response.json({
       success: true,

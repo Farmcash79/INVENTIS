@@ -12,7 +12,7 @@ export async function GET(request) {
       );
     }
 
-    const stockData = storage.stockControl.getAll();
+    const stockData = await storage.stockControl.getAll();
     return Response.json({
       success: true,
       data: stockData,
@@ -45,7 +45,7 @@ export async function POST(request) {
     }
 
     const stockData = await request.json();
-    const newStock = storage.stockControl.create(stockData);
+    const newStock = await storage.stockControl.create(stockData);
 
     return Response.json({
       success: true,

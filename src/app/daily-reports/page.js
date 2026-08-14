@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { storage, getSummaryData } from '@/lib/storage';
+import { storage, calculateDailyMetrics } from '@/lib/storage';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 const pageStyle = {
@@ -30,7 +30,7 @@ const subtitleStyle = {
 
 const dashboardStyle = {
   display: 'grid',
-  gridTemplateColumns: '1fr 1fr 1fr',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
   gap: '20px',
   marginBottom: '12px',
 };
@@ -60,7 +60,7 @@ const kpiValueStyle = {
 
 const mainContentStyle = {
   display: 'grid',
-  gridTemplateColumns: '3fr 1fr',
+  gridTemplateColumns: '3fr 1.2fr',
   gap: '20px',
 };
 
@@ -74,12 +74,27 @@ const tableContainerStyle = {
 const tableHeaderStyle = {
   padding: '20px 24px',
   borderBottom: '1px solid var(--border-color)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: '16px',
 };
 
 const tableTitleStyle = {
   fontSize: '16px',
   color: 'var(--text-primary)',
   fontWeight: 700,
+};
+
+const actionButtonStyle = {
+  appearance: 'none',
+  border: '1px solid var(--primary-gold)',
+  background: 'var(--primary-gold)',
+  color: '#101010',
+  padding: '10px 14px',
+  borderRadius: '8px',
+  fontWeight: 700,
+  cursor: 'pointer',
 };
 
 const tableStyle = {
@@ -181,6 +196,32 @@ const widgetItemValueStyle = {
   fontWeight: 700,
 };
 
+const formGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 1fr',
+  gap: '12px',
+};
+
+const formFieldStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '6px',
+};
+
+const inputStyle = {
+  background: 'rgba(255,255,255,0.04)',
+  border: '1px solid var(--border-color)',
+  borderRadius: '8px',
+  padding: '10px 12px',
+  color: 'var(--text-primary)',
+};
+
+const expenseTableStyle = {
+  width: '100%',
+  borderCollapse: 'collapse',
+  marginTop: '12px',
+};
+
 const getStatusStyle = (status) => {
   switch (status) {
     case 'high':
@@ -207,55 +248,144 @@ const getStatusDisplay = (status) => {
   }
 };
 
+const parseDate = (value) => {
+  if (!value) return new Date().toISOString().slice(0, 10);
+  return value;
+};
+
 export default function DailyReportsPage() {
   const [reports, setReports] = useState([]);
   const [products, setProducts] = useState([]);
-  const summaryData = getSummaryData();
+  const [expenses, setExpenses] = useState([]);
+  const [userRole, setUserRole] = useState('owner');
+  const [expenseForm, setExpenseForm] = useState({
+    id: null,
+    description: '',
+    category: 'Operations',
+    amount: '',
+    date: parseDate(new Date().toISOString().slice(0, 10)),
+  });
+  const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
+
+  const metrics = calculateDailyMetrics({ products, expenses });
 
   useEffect(() => {
-    const allReports = storage.dailyReports.getAll();
-    const allProducts = storage.products.getAll();
-    setReports(allReports);
-    setProducts(allProducts);
+    const loadData = async () => {
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        try {
+          const parsed = JSON.parse(storedUser);
+          setUserRole(parsed.role || 'owner');
+        } catch {
+          setUserRole('owner');
+        }
+      }
+
+      const [allReports, allProducts, allExpenses] = await Promise.all([
+        storage.dailyReports.getAll(),
+        storage.products.getAll(),
+        storage.expenses.getAll(),
+      ]);
+
+      setReports(allReports);
+      setProducts(allProducts);
+      setExpenses(allExpenses);
+    };
+
+    loadData();
   }, []);
 
   const topSellingProducts = products
     .slice()
     .sort((a, b) => {
-      const aSold = parseInt(a.stockSold.replace(/\D/g, ''), 10);
-      const bSold = parseInt(b.stockSold.replace(/\D/g, ''), 10);
+      const aSold = Number(a?.stockSold || 0);
+      const bSold = Number(b?.stockSold || 0);
       return bSold - aSold;
     })
     .slice(0, 5);
 
+  const handleExpenseChange = (field, value) => {
+    setExpenseForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const resetExpenseForm = () => {
+    setExpenseForm({
+      id: null,
+      description: '',
+      category: 'Operations',
+      amount: '',
+      date: parseDate(new Date().toISOString().slice(0, 10)),
+    });
+    setIsExpenseFormOpen(false);
+  };
+
+  const handleExpenseSubmit = async (event) => {
+    event.preventDefault();
+
+    const amount = Number(expenseForm.amount);
+    if (!expenseForm.description || !expenseForm.date || !Number.isFinite(amount) || amount <= 0) {
+      return;
+    }
+
+    const payload = {
+      description: expenseForm.description,
+      category: expenseForm.category,
+      amount,
+      date: expenseForm.date,
+      addedByRole: userRole,
+    };
+
+    if (expenseForm.id) {
+      const updatedExpense = await storage.expenses.update(expenseForm.id, payload);
+      setExpenses((prev) => prev.map((item) => (item.id === updatedExpense.id ? updatedExpense : item)));
+    } else {
+      const createdExpense = await storage.expenses.create(payload);
+      setExpenses((prev) => [...prev, createdExpense]);
+    }
+
+    resetExpenseForm();
+  };
+
+  const handleEditExpense = (expense) => {
+    setExpenseForm({
+      id: expense.id,
+      description: expense.description,
+      category: expense.category,
+      amount: String(expense.amount ?? 0),
+      date: expense.date || parseDate(new Date().toISOString().slice(0, 10)),
+    });
+    setIsExpenseFormOpen(true);
+  };
+
+  const handleDeleteExpense = async (expenseId) => {
+    await storage.expenses.delete(expenseId);
+    setExpenses((prev) => prev.filter((expense) => expense.id !== expenseId));
+  };
+
   return (
-    <ProtectedRoute requiredRole="owner">
+    <ProtectedRoute requiredRole={['owner', 'sales_rep']}>
       <div style={pageStyle}>
-        {/* Header */}
         <div style={headerContainerStyle}>
           <h1 style={titleStyle}>Daily Reports</h1>
-          <p style={subtitleStyle}>Full daily summary · Revenue, profit & top sellers</p>
+          <p style={subtitleStyle}>Daily summary · revenue, expense tracking, and net profit</p>
         </div>
 
-        {/* KPI Cards */}
         <div style={dashboardStyle}>
           <div style={kpiCardStyle}>
             <div style={kpiLabelStyle}>TOTAL REVENUE</div>
-            <div style={kpiValueStyle}>{summaryData.totalRevenue}</div>
+            <div style={kpiValueStyle}>{metrics.totalRevenue}</div>
           </div>
           <div style={kpiCardStyle}>
             <div style={kpiLabelStyle}>TOTAL EXPENSES</div>
-            <div style={kpiValueStyle}>{summaryData.totalExpenses}</div>
+            <div style={kpiValueStyle}>{metrics.totalExpenses}</div>
           </div>
           <div style={kpiCardStyle}>
-            <div style={kpiLabelStyle}>GROSS PROFIT</div>
-            <div style={kpiValueStyle}>{summaryData.grossProfit}</div>
+            <div style={kpiLabelStyle}>NET PROFIT</div>
+            <div style={kpiValueStyle}>{metrics.grossProfit}</div>
           </div>
         </div>
 
-        {/* Main Content */}
         <div style={mainContentStyle}>
-          {/* Daily Reports Table */}
           <div style={tableContainerStyle}>
             <div style={tableHeaderStyle}>
               <div style={tableTitleStyle}>Daily Metrics</div>
@@ -283,15 +413,13 @@ export default function DailyReportsPage() {
                       <td style={tableBodyCellStyle}>{report.sell}</td>
                       <td style={tableBodyCellStyle}>{report.stockSold}</td>
                       <td style={tableBodyCellStyle}>{report.profit}</td>
-                      <td style={getStatusStyle(report.status)}>
-                        {getStatusDisplay(report.status)}
-                      </td>
+                      <td style={getStatusStyle(report.status)}>{getStatusDisplay(report.status)}</td>
                       <td style={tableBodyCellStyle}>{report.date}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="8" style={{...tableBodyCellStyle, textAlign: 'center'}}>
+                    <td colSpan="8" style={{ ...tableBodyCellStyle, textAlign: 'center' }}>
                       No daily reports available
                     </td>
                   </tr>
@@ -300,18 +428,116 @@ export default function DailyReportsPage() {
             </table>
           </div>
 
-          {/* Right Sidebar Widgets */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {/* Business Capital Widget */}
             <div style={widgetStyle}>
-              <div style={widgetTitleStyle}>Business Capital</div>
-              <div style={widgetValueStyle}>$800K</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center' }}>
-                Current capital allocation
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                <div style={widgetTitleStyle}>Expense Tracker</div>
+                <button type="button" style={actionButtonStyle} onClick={() => setIsExpenseFormOpen(true)}>
+                  + Add Expense
+                </button>
               </div>
+
+              {isExpenseFormOpen && (
+                <form onSubmit={handleExpenseSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={formGridStyle}>
+                    <label style={formFieldStyle}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Description</span>
+                      <input
+                        style={inputStyle}
+                        value={expenseForm.description}
+                        onChange={(event) => handleExpenseChange('description', event.target.value)}
+                        placeholder="Transport, utilities, rent..."
+                        required
+                      />
+                    </label>
+                    <label style={formFieldStyle}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Category</span>
+                      <select
+                        style={inputStyle}
+                        value={expenseForm.category}
+                        onChange={(event) => handleExpenseChange('category', event.target.value)}
+                      >
+                        <option value="Operations">Operations</option>
+                        <option value="Marketing">Marketing</option>
+                        <option value="Utilities">Utilities</option>
+                        <option value="Shipping">Shipping</option>
+                        <option value="Payroll">Payroll</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </label>
+                    <label style={formFieldStyle}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Amount</span>
+                      <input
+                        style={inputStyle}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={expenseForm.amount}
+                        onChange={(event) => handleExpenseChange('amount', event.target.value)}
+                        placeholder="0.00"
+                        required
+                      />
+                    </label>
+                    <label style={formFieldStyle}>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Date</span>
+                      <input
+                        style={inputStyle}
+                        type="date"
+                        value={expenseForm.date}
+                        onChange={(event) => handleExpenseChange('date', event.target.value)}
+                        required
+                      />
+                    </label>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button type="submit" style={actionButtonStyle}>{expenseForm.id ? 'Save Expense' : 'Add Expense'}</button>
+                    <button type="button" onClick={resetExpenseForm} style={{ ...actionButtonStyle, background: 'transparent', color: 'var(--text-primary)' }}>
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              <table style={expenseTableStyle}>
+                <thead style={tableHeadRowStyle}>
+                  <tr>
+                    <th style={tableHeadCellStyle}>Description</th>
+                    <th style={tableHeadCellStyle}>Amount</th>
+                    <th style={tableHeadCellStyle}>Date</th>
+                    <th style={tableHeadCellStyle}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {expenses.length > 0 ? (
+                    expenses.map((expense) => (
+                      <tr key={expense.id}>
+                        <td style={tableBodyCellStyle}>{expense.description}</td>
+                        <td style={tableBodyCellStyle}>${Number(expense.amount || 0).toLocaleString()}</td>
+                        <td style={tableBodyCellStyle}>{expense.date}</td>
+                        <td style={tableBodyCellStyle}>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button type="button" onClick={() => handleEditExpense(expense)} style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-primary)', borderRadius: '6px', padding: '6px 8px', cursor: 'pointer' }}>
+                              Edit
+                            </button>
+                            <button type="button" onClick={() => handleDeleteExpense(expense.id)} style={{ background: 'transparent', border: '1px solid #d75959', color: '#f29c9c', borderRadius: '6px', padding: '6px 8px', cursor: 'pointer' }}>
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="4" style={{ ...tableBodyCellStyle, textAlign: 'center' }}>
+                        No expenses recorded yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
 
-            {/* Top Selling Products Widget */}
             <div style={widgetStyle}>
               <div style={widgetTitleStyle}>Top Selling Products</div>
               <div style={widgetListStyle}>

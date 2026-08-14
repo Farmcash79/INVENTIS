@@ -47,15 +47,13 @@ export default function Sidebar({ userRole }) {
           </Link>
         </div>
 
-        {isOwner && (
-          <div className={styles.navSection}>
-            <div className={styles.sectionTitle}>Analytics</div>
-            <Link href="/daily-reports" className={styles.navLink}>
-              <span className={styles.icon}>◇</span>
-              <span>Daily Reports</span>
-            </Link>
-          </div>
-        )}
+        <div className={styles.navSection}>
+          <div className={styles.sectionTitle}>Analytics</div>
+          <Link href="/daily-reports" className={styles.navLink}>
+            <span className={styles.icon}>◇</span>
+            <span>Daily Reports</span>
+          </Link>
+        </div>
       </nav>
 
       <div className={styles.footer}>

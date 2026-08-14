@@ -12,7 +12,7 @@ export async function GET(request) {
       );
     }
 
-    const userData = storage.users.getById(user.userId);
+    const userData = await storage.users.getById(user.userId);
     if (!userData) {
       return Response.json(
         { error: 'User not found' },
