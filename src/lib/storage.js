@@ -1,62 +1,40 @@
-const defaultUsers = [
-  {
-    id: '1',
-    name: 'James Osei',
-    email: 'owner@example.com',
-    passwordHash: '',
-    role: 'owner',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    name: 'John Sales',
-    email: 'salesrep@example.com',
-    passwordHash: '',
-    role: 'sales_rep',
-    createdAt: new Date().toISOString(),
-  },
-];
-
-const defaultProducts = [
-  {
-    id: '1',
-    name: 'Earpod',
-    category: 'Audio',
-    buyPrice: '$2k',
-    sellPrice: '$3k',
-    inStock: 300,
-    stockSold: 3000,
-    profit: '$300k',
-    status: 'high',
-  },
-  {
-    id: '2',
-    name: 'Laptop bag',
-    category: 'Accessories',
-    buyPrice: '$1k',
-    sellPrice: '$2k',
-    inStock: 100,
-    stockSold: 200,
-    profit: '$100k',
-    status: 'high',
-  },
-  {
-    id: '3',
-    name: 'USB Cable',
-    category: 'Electronics',
-    buyPrice: '$500',
-    sellPrice: '$1k',
-    inStock: 50,
-    stockSold: 100,
-    profit: '$50k',
-    status: 'low',
-  },
-];
-
+const defaultUsers = [];
+const defaultProducts = [];
 const defaultReports = [];
 const defaultExpenses = [];
 const defaultReceipts = [];
 const defaultStock = [];
+
+const clearLegacyMockData = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const legacyKeys = ['trakit_users', 'trakit_products', 'trakit_daily_reports', 'trakit_expenses', 'trakit_receipts', 'trakit_stock_control'];
+
+  for (const key of legacyKeys) {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) continue;
+
+      const parsed = JSON.parse(raw);
+      const isLegacyMockData = Array.isArray(parsed) && parsed.some((item) => {
+        if (item && typeof item === 'object') {
+          return item.email === 'owner@example.com' || item.email === 'salesrep@example.com' || item.name === 'James Osei' || item.name === 'John Sales' || item.name === 'Earpod';
+        }
+        return false;
+      });
+
+      if (isLegacyMockData) {
+        window.localStorage.removeItem(key);
+      }
+    } catch {
+      // Ignore malformed local storage data and keep the live state clean.
+    }
+  }
+};
+
+clearLegacyMockData();
 
 const fallbackStorage = globalThis.__trakitStorage ?? (globalThis.__trakitStorage = {});
 

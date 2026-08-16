@@ -1,52 +1,19 @@
-import bcrypt from 'bcryptjs';
 import fs from 'fs/promises';
 import path from 'path';
 
 let prisma = null;
 
-const fallbackPasswordHash = bcrypt.hashSync('password', 10);
 const fallbackStoragePath = path.join(process.cwd(), 'data', 'fallback-storage.json');
 
-const defaultUsers = [
-  {
-    id: '1',
-    name: 'James Osei',
-    email: 'owner@example.com',
-    passwordHash: fallbackPasswordHash,
-    role: 'owner',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    name: 'John Sales',
-    email: 'salesrep@example.com',
-    passwordHash: fallbackPasswordHash,
-    role: 'sales_rep',
-    createdAt: new Date().toISOString(),
-  },
-];
-
-const defaultProducts = [
-  {
-    id: '1',
-    name: 'Earpod',
-    category: 'Audio',
-    buyPrice: '$2k',
-    sellPrice: '$3k',
-    inStock: 300,
-    stockSold: 3000,
-    profit: '$300k',
-    status: 'high',
-  },
-];
-
+const defaultUsers = [];
+const defaultProducts = [];
 const defaultExpenses = [];
 
 const defaultFallbackState = {
-  users: [...defaultUsers],
-  products: [...defaultProducts],
+  users: [],
+  products: [],
   reports: [],
-  expenses: [...defaultExpenses],
+  expenses: [],
   receipts: [],
   stock: [],
 };
@@ -58,10 +25,10 @@ const loadFallbackState = async () => {
     const parsed = JSON.parse(raw);
 
     return {
-      users: Array.isArray(parsed.users) ? parsed.users : [...defaultUsers],
-      products: Array.isArray(parsed.products) ? parsed.products : [...defaultProducts],
+      users: Array.isArray(parsed.users) ? parsed.users : [],
+      products: Array.isArray(parsed.products) ? parsed.products : [],
       reports: Array.isArray(parsed.reports) ? parsed.reports : [],
-      expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [...defaultExpenses],
+      expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
       receipts: Array.isArray(parsed.receipts) ? parsed.receipts : [],
       stock: Array.isArray(parsed.stock) ? parsed.stock : [],
     };
@@ -102,8 +69,8 @@ const mapStockControl = (row) => ({
   date: row.date instanceof Date ? row.date : new Date(row.date),
 });
 
-let fallbackUsers = [...defaultUsers];
-let fallbackProducts = [...defaultProducts];
+let fallbackUsers = [];
+let fallbackProducts = [];
 let fallbackReports = [];
 let fallbackReceipts = [];
 let fallbackStock = [];
@@ -120,7 +87,7 @@ const getPrisma = async () => {
       const prismaModule = await import('./prisma.js');
       prisma = prismaModule.default;
     } catch (error) {
-      console.warn('Prisma client unavailable, using fallback storage.', error.message);
+      console.warn('Prisma client unavailable. Database connection is not active.', error.message);
       prisma = null;
     }
   }
@@ -134,10 +101,14 @@ const runWithFallback = async (operation, fallbackValue) => {
   }
 
   try {
-    await getPrisma();
-    return await operation();
+    const currentPrisma = await getPrisma();
+    if (!currentPrisma) {
+      return fallbackValue;
+    }
+
+    return await operation(currentPrisma);
   } catch (error) {
-    console.warn('Prisma unavailable, using fallback storage.', error.message);
+    console.warn('Prisma unavailable. Returning empty fallback state.', error.message);
     return fallbackValue;
   }
 };
@@ -146,73 +117,34 @@ export const serverStorage = {
   users: {
     getAll: async () => {
       return runWithFallback(
-        async () => {
-          const currentPrisma = await getPrisma();
-          if (!currentPrisma) {
-            const state = await loadFallbackState();
-            return state.users.map((row) => ({ ...row, createdAt: new Date(row.createdAt) }));
-          }
-
+        async (currentPrisma) => {
           const results = await currentPrisma.user.findMany();
           return results.map((row) => ({ ...row, createdAt: new Date(row.createdAt) }));
         },
-        fallbackUsers.map((row) => ({ ...row, createdAt: new Date(row.createdAt) }))
+        []
       );
     },
     getById: async (id) => {
       return runWithFallback(
-        async () => {
-          const currentPrisma = await getPrisma();
-          if (!currentPrisma) {
-            const state = await loadFallbackState();
-            const found = state.users.find((row) => row.id === id);
-            return found ? { ...found, createdAt: new Date(found.createdAt) } : null;
-          }
-
+        async (currentPrisma) => {
           const row = await currentPrisma.user.findUnique({ where: { id } });
           return row ? { ...row, createdAt: new Date(row.createdAt) } : null;
         },
-        fallbackUsers.find((row) => row.id === id) ? { ...fallbackUsers.find((row) => row.id === id), createdAt: new Date(fallbackUsers.find((row) => row.id === id).createdAt) } : null
+        null
       );
     },
     getByEmail: async (email) => {
       return runWithFallback(
-        async () => {
-          const currentPrisma = await getPrisma();
-          if (!currentPrisma) {
-            const state = await loadFallbackState();
-            const found = state.users.find((row) => row.email === email);
-            return found ? { ...found, createdAt: new Date(found.createdAt) } : null;
-          }
-
+        async (currentPrisma) => {
           const row = await currentPrisma.user.findUnique({ where: { email } });
           return row ? { ...row, createdAt: new Date(row.createdAt) } : null;
         },
-        fallbackUsers.find((row) => row.email === email) ? { ...fallbackUsers.find((row) => row.email === email), createdAt: new Date(fallbackUsers.find((row) => row.email === email).createdAt) } : null
+        null
       );
     },
     create: async ({ name, email, passwordHash, role }) => {
       return runWithFallback(
-        async () => {
-          const currentPrisma = await getPrisma();
-          if (!currentPrisma) {
-            const state = await loadFallbackState();
-            const created = {
-              id: String(Date.now()),
-              name,
-              email,
-              passwordHash,
-              role,
-              createdAt: new Date().toISOString(),
-            };
-            const nextState = {
-              ...state,
-              users: [...state.users, created],
-            };
-            await saveFallbackState(nextState);
-            return created;
-          }
-
+        async (currentPrisma) => {
           const created = await currentPrisma.user.create({
             data: {
               name,
@@ -223,33 +155,12 @@ export const serverStorage = {
           });
           return { ...created, createdAt: new Date(created.createdAt) };
         },
-        (() => {
-          const created = {
-            id: String(Date.now()),
-            name,
-            email,
-            passwordHash,
-            role,
-            createdAt: new Date().toISOString(),
-          };
-          fallbackUsers = [...fallbackUsers, created];
-          return created;
-        })()
+        null
       );
     },
     update: async (id, updates) => {
       return runWithFallback(
-        async () => {
-          const currentPrisma = await getPrisma();
-          if (!currentPrisma) {
-            const state = await loadFallbackState();
-            const index = state.users.findIndex((row) => row.id === id);
-            if (index === -1) return null;
-            state.users[index] = { ...state.users[index], ...updates };
-            await saveFallbackState(state);
-            return { ...state.users[index], createdAt: new Date(state.users[index].createdAt) };
-          }
-
+        async (currentPrisma) => {
           const existing = await currentPrisma.user.findUnique({ where: { id } });
           if (!existing) return null;
           const updated = await currentPrisma.user.update({
@@ -263,12 +174,7 @@ export const serverStorage = {
           });
           return { ...updated, createdAt: new Date(updated.createdAt) };
         },
-        (() => {
-          const index = fallbackUsers.findIndex((row) => row.id === id);
-          if (index === -1) return null;
-          fallbackUsers[index] = { ...fallbackUsers[index], ...updates };
-          return { ...fallbackUsers[index], createdAt: new Date(fallbackUsers[index].createdAt) };
-        })()
+        null
       );
     },
   },
@@ -276,26 +182,26 @@ export const serverStorage = {
   products: {
     getAll: async () => {
       return runWithFallback(
-        async () => {
-          const results = await prisma.product.findMany();
+        async (currentPrisma) => {
+          const results = await currentPrisma.product.findMany();
           return results.map(mapProduct);
         },
-        fallbackProducts.map(mapProduct)
+        []
       );
     },
     getById: async (id) => {
       return runWithFallback(
-        async () => {
-          const row = await prisma.product.findUnique({ where: { id } });
+        async (currentPrisma) => {
+          const row = await currentPrisma.product.findUnique({ where: { id } });
           return row ? mapProduct(row) : null;
         },
-        fallbackProducts.find((row) => row.id === id) ? mapProduct(fallbackProducts.find((row) => row.id === id)) : null
+        null
       );
     },
     create: async (product) => {
       return runWithFallback(
-        async () => {
-          const created = await prisma.product.create({
+        async (currentPrisma) => {
+          const created = await currentPrisma.product.create({
             data: {
               name: product.name,
               category: product.category,
@@ -309,24 +215,15 @@ export const serverStorage = {
           });
           return mapProduct(created);
         },
-        (() => {
-          const created = {
-            id: String(Date.now()),
-            ...product,
-            inStock: Number(product.inStock),
-            stockSold: Number(product.stockSold),
-          };
-          fallbackProducts = [...fallbackProducts, created];
-          return mapProduct(created);
-        })()
+        null
       );
     },
     update: async (id, updates) => {
       return runWithFallback(
-        async () => {
-          const existing = await prisma.product.findUnique({ where: { id } });
+        async (currentPrisma) => {
+          const existing = await currentPrisma.product.findUnique({ where: { id } });
           if (!existing) return null;
-          const updated = await prisma.product.update({
+          const updated = await currentPrisma.product.update({
             where: { id },
             data: {
               name: updates.name ?? existing.name,
@@ -341,24 +238,16 @@ export const serverStorage = {
           });
           return mapProduct(updated);
         },
-        (() => {
-          const index = fallbackProducts.findIndex((row) => row.id === id);
-          if (index === -1) return null;
-          fallbackProducts[index] = { ...fallbackProducts[index], ...updates };
-          return mapProduct(fallbackProducts[index]);
-        })()
+        null
       );
     },
     delete: async (id) => {
       return runWithFallback(
-        async () => {
-          await prisma.product.delete({ where: { id } });
+        async (currentPrisma) => {
+          await currentPrisma.product.delete({ where: { id } });
           return true;
         },
-        (() => {
-          fallbackProducts = fallbackProducts.filter((row) => row.id !== id);
-          return true;
-        })()
+        false
       );
     },
   },
@@ -366,30 +255,30 @@ export const serverStorage = {
   dailyReports: {
     getAll: async () => {
       return runWithFallback(
-        async () => {
-          const results = await prisma.dailyReport.findMany();
+        async (currentPrisma) => {
+          const results = await currentPrisma.dailyReport.findMany();
           return results.map(mapReport);
         },
-        fallbackReports.map(mapReport)
+        []
       );
     },
     getByDate: async (date) => {
       return runWithFallback(
-        async () => {
-          const results = await prisma.dailyReport.findMany({ where: { date } });
+        async (currentPrisma) => {
+          const results = await currentPrisma.dailyReport.findMany({ where: { date } });
           return results.map(mapReport);
         },
-        fallbackReports.filter((row) => row.date === date).map(mapReport)
+        []
       );
     },
     getTodayReport: async () => {
       const today = new Date().toISOString().split('T')[0];
       return runWithFallback(
-        async () => {
-          const results = await prisma.dailyReport.findMany({ where: { date: today } });
+        async (currentPrisma) => {
+          const results = await currentPrisma.dailyReport.findMany({ where: { date: today } });
           return results.map(mapReport);
         },
-        fallbackReports.filter((row) => row.date === today).map(mapReport)
+        []
       );
     },
   },
@@ -401,7 +290,7 @@ export const serverStorage = {
           const state = await loadFallbackState();
           return state.expenses;
         },
-        fallbackUsers.length ? fallbackUsers.map(() => []) : []
+        []
       );
     },
     getById: async (id) => {
@@ -410,7 +299,7 @@ export const serverStorage = {
           const state = await loadFallbackState();
           return state.expenses.find((row) => row.id === id) || null;
         },
-        []
+        null
       );
     },
     create: async (expense) => {
@@ -452,7 +341,7 @@ export const serverStorage = {
           await saveFallbackState(nextState);
           return true;
         },
-        true
+        false
       );
     },
   },
@@ -460,26 +349,26 @@ export const serverStorage = {
   eReceipts: {
     getAll: async () => {
       return runWithFallback(
-        async () => {
-          const results = await prisma.eReceipt.findMany();
+        async (currentPrisma) => {
+          const results = await currentPrisma.eReceipt.findMany();
           return results.map(mapReceipt);
         },
-        fallbackReceipts.map(mapReceipt)
+        []
       );
     },
     getById: async (id) => {
       return runWithFallback(
-        async () => {
-          const row = await prisma.eReceipt.findUnique({ where: { id } });
+        async (currentPrisma) => {
+          const row = await currentPrisma.eReceipt.findUnique({ where: { id } });
           return row ? mapReceipt(row) : null;
         },
-        fallbackReceipts.find((row) => row.id === id) ? mapReceipt(fallbackReceipts.find((row) => row.id === id)) : null
+        null
       );
     },
     create: async (receipt) => {
       return runWithFallback(
-        async () => {
-          const created = await prisma.eReceipt.create({
+        async (currentPrisma) => {
+          const created = await currentPrisma.eReceipt.create({
             data: {
               customerName: receipt.customerName,
               customerPhone: receipt.customerPhone,
@@ -491,16 +380,7 @@ export const serverStorage = {
           });
           return mapReceipt(created);
         },
-        (() => {
-          const created = {
-            id: String(Date.now()),
-            ...receipt,
-            items: receipt.items || [],
-            createdAt: new Date().toISOString(),
-          };
-          fallbackReceipts = [...fallbackReceipts, created];
-          return mapReceipt(created);
-        })()
+        null
       );
     },
   },
@@ -508,17 +388,17 @@ export const serverStorage = {
   stockControl: {
     getAll: async () => {
       return runWithFallback(
-        async () => {
-          const results = await prisma.stockControl.findMany();
+        async (currentPrisma) => {
+          const results = await currentPrisma.stockControl.findMany();
           return results.map(mapStockControl);
         },
-        fallbackStock.map(mapStockControl)
+        []
       );
     },
     create: async (item) => {
       return runWithFallback(
-        async () => {
-          const created = await prisma.stockControl.create({
+        async (currentPrisma) => {
+          const created = await currentPrisma.stockControl.create({
             data: {
               product: item.product,
               category: item.category,
@@ -529,18 +409,7 @@ export const serverStorage = {
           });
           return mapStockControl(created);
         },
-        (() => {
-          const created = {
-            id: String(Date.now()),
-            ...item,
-            quantity: Number(item.quantity),
-            unitPrice: Number(item.unitPrice),
-            totalPrice: Number(item.totalPrice),
-            date: new Date().toISOString(),
-          };
-          fallbackStock = [...fallbackStock, created];
-          return mapStockControl(created);
-        })()
+        null
       );
     },
   },
