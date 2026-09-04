@@ -1,0 +1,140 @@
+.sidebar {
+  width: 250px;
+  height: 100vh;
+  background: var(--dark-bg);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  padding: 30px 20px;
+  position: fixed;
+  left: 0;
+  top: 0;
+  overflow-y: auto;
+}
+
+.logo {
+  text-align: center;
+  margin-bottom: 40px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.logoText {
+  font-size: 16px;
+  color: var(--primary-gold);
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.logoSubtext {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  letter-spacing: 0.5px;
+}
+
+.nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.navSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  transition: all 0.3s ease;
+  border-radius: 6px;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--card-bg);
+    color: var(--primary-gold);
+  }
+
+  &.active {
+    background: var(--primary-gold);
+    color: var(--dark-bg);
+    font-weight: 600;
+  }
+}
+
+.icon {
+  display: inline-block;
+  width: 16px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.userProfile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--card-bg);
+  border: 2px solid var(--border-color);
+}
+
+.userInfo {
+  flex: 1;
+}
+
+.userName {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.userRole {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.logoutBtn {
+  padding: 8px 12px;
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: var(--primary-gold);
+    color: var(--dark-bg);
+    border-color: var(--primary-gold);
+  }
+}

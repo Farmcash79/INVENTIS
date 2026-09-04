@@ -1,0 +1,210 @@
+.authContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: var(--primary-dark);
+  padding: 20px;
+}
+
+.authCard {
+  background: var(--card-bg);
+  border-radius: 20px;
+  padding: 50px 45px;
+  width: 100%;
+  max-width: 500px;
+}
+
+.authHeader {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.authTitle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.welcome {
+  font-size: 16px;
+  color: var(--primary-gold);
+  letter-spacing: 2px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.brand {
+  font-size: 36px;
+  color: var(--text-primary);
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.formTitle {
+  text-align: center;
+  font-size: 20px;
+  color: var(--text-primary);
+  font-weight: 700;
+  margin-bottom: 30px;
+  letter-spacing: 1px;
+}
+
+.formGroup {
+  margin-bottom: 18px;
+}
+
+.formInput {
+  width: 100%;
+  padding: 13px 16px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.formInput::placeholder {
+  color: var(--text-muted);
+}
+
+.formInput:focus {
+  outline: none;
+  border-color: var(--primary-gold);
+  box-shadow: 0 0 0 2px rgba(212, 165, 116, 0.2);
+}
+
+.roleSection {
+  margin: 35px 0;
+  text-align: center;
+}
+
+.roleLabel {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 600;
+  margin-bottom: 18px;
+  display: block;
+}
+
+.roleSelector {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+}
+
+.roleButton {
+  padding: 12px 32px;
+  border: 2px solid var(--border-color);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 110px;
+}
+
+.roleButton:hover {
+  border-color: var(--primary-gold);
+  background: rgba(212, 165, 116, 0.1);
+}
+
+.roleButton.active {
+  background: var(--primary-gold);
+  border-color: var(--primary-gold);
+  color: var(--dark-bg);
+}
+
+.roleButton.active.salesRep {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+}
+
+.orLabel {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.submitButton {
+  width: 100%;
+  padding: 15px;
+  background: var(--primary-gold);
+  color: var(--dark-bg);
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 35px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.submitButton:hover {
+  background: #e0a66a;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(212, 165, 116, 0.3);
+}
+
+.submitButton:active {
+  transform: translateY(0);
+}
+
+.submitButton:disabled {
+  background: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.authLink {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.authLink a {
+  color: var(--primary-gold);
+  text-decoration: none;
+  font-weight: 600;
+  margin-left: 5px;
+}
+
+.authLink a:hover {
+  text-decoration: underline;
+}
+
+.errorMessage {
+  padding: 12px 14px;
+  background: rgba(255, 51, 51, 0.1);
+  border: 1px solid var(--status-danger);
+  border-radius: 6px;
+  color: var(--status-danger);
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+
+.loadingSpinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: var(--dark-bg);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

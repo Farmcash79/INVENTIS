@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String
+  createdAt    DateTime @default(now())
+}
+
+model Product {
+  id        String @id @default(uuid())
+  name      String
+  category  String
+  buyPrice  String
+  sellPrice String
+  inStock   Int
+  stockSold Int
+  profit    String
+  status    String
+}
+
+model DailyReport {
+  id        String @id @default(uuid())
+  date      String
+  product   String
+  category  String
+  buy       String
+  sell      String
+  inStock   Int
+  stockSold Int
+  profit    String
+  status    String
+}
+
+model EReceipt {
+  id            String   @id @default(uuid())
+  customerName  String
+  customerPhone String
+  items         String
+  totalAmount   String
+  createdBy     String
+  createdByRole String
+  createdAt     DateTime @default(now())
+}
+
+model StockControl {
+  id         String   @id @default(uuid())
+  product    String
+  category   String
+  quantity   Int
+  unitPrice  Int
+  totalPrice Int
+  date       DateTime @default(now())
+}
