@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { storage, calculateDailyMetrics } from '@/lib/storage';
+import { calculateDailyMetrics } from '@/lib/storage';
+import { fetchReports, fetchProducts, fetchExpenses, createExpense, updateExpense, deleteExpense } from '@/lib/apiClient';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 const pageStyle = {
@@ -266,6 +267,8 @@ export default function DailyReportsPage() {
     date: parseDate(new Date().toISOString().slice(0, 10)),
   });
   const [isExpenseFormOpen, setIsExpenseFormOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const metrics = calculateDailyMetrics({ products, expenses });
 
@@ -281,15 +284,21 @@ export default function DailyReportsPage() {
         }
       }
 
-      const [allReports, allProducts, allExpenses] = await Promise.all([
-        storage.dailyReports.getAll(),
-        storage.products.getAll(),
-        storage.expenses.getAll(),
-      ]);
+      try {
+        const [allReports, allProducts, allExpenses] = await Promise.all([
+          fetchReports(),
+          fetchProducts(),
+          fetchExpenses(),
+        ]);
 
-      setReports(allReports);
-      setProducts(allProducts);
-      setExpenses(allExpenses);
+        setReports(allReports);
+        setProducts(allProducts);
+        setExpenses(allExpenses);
+      } catch (error) {
+        setLoadError(error.message || 'Could not load report data from the server.');
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     loadData();
@@ -335,15 +344,18 @@ export default function DailyReportsPage() {
       addedByRole: userRole,
     };
 
-    if (expenseForm.id) {
-      const updatedExpense = await storage.expenses.update(expenseForm.id, payload);
-      setExpenses((prev) => prev.map((item) => (item.id === updatedExpense.id ? updatedExpense : item)));
-    } else {
-      const createdExpense = await storage.expenses.create(payload);
-      setExpenses((prev) => [...prev, createdExpense]);
+    try {
+      if (expenseForm.id) {
+        const updatedExpense = await updateExpense(expenseForm.id, payload);
+        setExpenses((prev) => prev.map((item) => (item.id === updatedExpense.id ? updatedExpense : item)));
+      } else {
+        const createdExpense = await createExpense(payload);
+        setExpenses((prev) => [...prev, createdExpense]);
+      }
+      resetExpenseForm();
+    } catch (error) {
+      alert(error.message || 'Could not save the expense.');
     }
-
-    resetExpenseForm();
   };
 
   const handleEditExpense = (expense) => {
@@ -358,8 +370,14 @@ export default function DailyReportsPage() {
   };
 
   const handleDeleteExpense = async (expenseId) => {
-    await storage.expenses.delete(expenseId);
-    setExpenses((prev) => prev.filter((expense) => expense.id !== expenseId));
+    const previous = expenses;
+    setExpenses((prev) => prev.filter((expense) => expense.id !== expenseId)); // optimistic
+    try {
+      await deleteExpense(expenseId);
+    } catch (error) {
+      setExpenses(previous);
+      alert(error.message || 'Could not delete the expense.');
+    }
   };
 
   return (
@@ -369,6 +387,12 @@ export default function DailyReportsPage() {
           <h1 style={titleStyle}>Daily Reports</h1>
           <p style={subtitleStyle}>Daily summary · revenue, expense tracking, and net profit</p>
         </div>
+
+        {loadError && (
+          <div style={{ padding: '12px 16px', background: 'rgba(220,53,69,0.1)', border: '1px solid #dc3545', borderRadius: '8px', color: '#dc3545', fontSize: '13px' }}>
+            {loadError}
+          </div>
+        )}
 
         <div style={dashboardStyle}>
           <div style={kpiCardStyle}>

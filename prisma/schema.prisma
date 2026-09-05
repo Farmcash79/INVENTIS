@@ -61,3 +61,13 @@ model StockControl {
   totalPrice Int
   date       DateTime @default(now())
 }
+
+model Expense {
+  id           String   @id @default(uuid())
+  description  String
+  category     String
+  amount       Float
+  date         String
+  addedByRole  String?
+  createdAt    DateTime @default(now())
+}

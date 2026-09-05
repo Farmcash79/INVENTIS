@@ -36,15 +36,16 @@ export async function POST(request) {
       );
     }
 
-    // Only owners can create products
+    // Owners can create products with full pricing. Sales reps can also add
+    // a new item to stock (per the app's design — reps record stock and
+    // sales), but their price fields are ignored server-side; pricing is
+    // the owner's job and defaults to $0 until the owner sets it.
+    const productData = await request.json();
     if (user.role !== 'owner') {
-      return Response.json(
-        { error: 'Only owners can create products' },
-        { status: 403 }
-      );
+      productData.buyPrice = '$0';
+      productData.sellPrice = '$0';
     }
 
-    const productData = await request.json();
     const product = await storage.products.create(productData);
 
     return Response.json({

@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { storage } from '@/lib/storage';
+import { calculateDailyMetrics } from '@/lib/storage';
+import { fetchProducts, fetchExpenses } from '@/lib/apiClient';
+import ProtectedRoute from '@/components/ProtectedRoute';
 
 const dashboardStyle = {
   display: 'grid',
@@ -176,11 +178,33 @@ const getStatusDisplay = (status) => {
 
 export default function DashboardPage() {
   const [products, setProducts] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [userRole, setUserRole] = useState('owner');
 
   useEffect(() => {
-    const allProducts = storage.products.getAll();
-    setProducts(allProducts);
+    try {
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+        if (parsed.role) setUserRole(parsed.role);
+      }
+    } catch (e) {
+      console.error('Could not load user role context', e);
+    }
+
+    Promise.all([fetchProducts(), fetchExpenses()])
+      .then(([productsData, expensesData]) => {
+        setProducts(productsData);
+        setExpenses(expensesData);
+      })
+      .catch((error) => setLoadError(error.message || 'Could not load dashboard data from the server.'))
+      .finally(() => setIsLoading(false));
   }, []);
+
+  const isSalesRep = userRole === 'sales_rep';
+  const metrics = calculateDailyMetrics({ products, expenses });
 
   const topSellingProducts = products
     .slice()
@@ -192,6 +216,7 @@ export default function DashboardPage() {
     .slice(0, 5);
 
   return (
+    <ProtectedRoute requiredRole={['owner', 'sales_rep']}>
     <div>
       <h1 style={{
         fontSize: '24px',
@@ -202,21 +227,29 @@ export default function DashboardPage() {
         Dashboard Overview
       </h1>
 
-      {/* KPI Cards */}
-      <div style={dashboardStyle}>
-        <div style={kpiCardStyle}>
-          <div style={kpiLabelStyle}>TOTAL REVENUE</div>
-          <div style={kpiValueStyle}>$97.40K</div>
+      {loadError && (
+        <div style={{ padding: '12px 16px', background: 'rgba(220,53,69,0.1)', border: '1px solid #dc3545', borderRadius: '8px', color: '#dc3545', fontSize: '13px', marginBottom: '20px' }}>
+          {loadError}
         </div>
-        <div style={kpiCardStyle}>
-          <div style={kpiLabelStyle}>TOTAL EXPENSES</div>
-          <div style={kpiValueStyle}>$27.40K</div>
+      )}
+
+      {/* KPI Cards — owner only; sales reps aren't shown revenue/profit figures */}
+      {!isSalesRep && (
+        <div style={dashboardStyle}>
+          <div style={kpiCardStyle}>
+            <div style={kpiLabelStyle}>TOTAL REVENUE</div>
+            <div style={kpiValueStyle}>{isLoading ? '...' : metrics.totalRevenue}</div>
+          </div>
+          <div style={kpiCardStyle}>
+            <div style={kpiLabelStyle}>TOTAL EXPENSES</div>
+            <div style={kpiValueStyle}>{isLoading ? '...' : metrics.totalExpenses}</div>
+          </div>
+          <div style={kpiCardStyle}>
+            <div style={kpiLabelStyle}>GROSS PROFIT</div>
+            <div style={kpiValueStyle}>{isLoading ? '...' : metrics.grossProfit}</div>
+          </div>
         </div>
-        <div style={kpiCardStyle}>
-          <div style={kpiLabelStyle}>GROSS PROFIT</div>
-          <div style={kpiValueStyle}>$40.10K</div>
-        </div>
-      </div>
+      )}
 
       {/* Main Content */}
       <div style={tableContainerStyle}>
@@ -276,5 +309,6 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+    </ProtectedRoute>
   );
 }

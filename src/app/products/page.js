@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { storage } from '@/lib/storage';
+import { fetchProducts, createProduct, updateProduct, deleteProduct } from '@/lib/apiClient';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 // LAYOUT STYLES
@@ -100,15 +100,21 @@ export default function ProductsPage() {
     setFinancials({ totalProfit: profitAccumulator, totalLoss: lossAccumulator });
   }, [products]);
 
-  useEffect(() => {
-    const allProducts = storage.products.getAll();
-    setProducts(allProducts);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
+  useEffect(() => {
     const userData = localStorage.getItem('user');
     if (userData) {
       const user = JSON.parse(userData);
       setUserRole(user.role);
     }
+
+    fetchProducts()
+      .then(setProducts)
+      .catch((error) => setLoadError(error.message || 'Could not load products from the server.'))
+      .finally(() => setIsLoading(false));
   }, []);
 
   const filteredProducts = selectedCategory === 'All'
@@ -133,19 +139,24 @@ export default function ProductsPage() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = (productId) => {
+  const handleDelete = async (productId) => {
     if (userRole !== 'owner') {
       alert('Only owners can delete products');
       return;
     }
-    const updatedProducts = products.filter((p) => p.id !== productId);
-    setProducts(updatedProducts);
-    if (storage.products && typeof storage.products.saveAll === 'function') {
-      storage.products.saveAll(updatedProducts);
+    if (!window.confirm('Delete this product?')) return;
+
+    const previous = products;
+    setProducts(products.filter((p) => p.id !== productId)); // optimistic
+    try {
+      await deleteProduct(productId);
+    } catch (error) {
+      setProducts(previous); // revert on failure
+      alert(error.message || 'Could not delete product.');
     }
   };
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
 
     const stockNum = parseInt(formData.inStock, 10) || 0;
@@ -157,56 +168,51 @@ export default function ProductsPage() {
 
     const cleanBuyPrice = parseFloat(formData.buyPrice) || 0;
     const cleanSellPrice = parseFloat(formData.sellPrice) || 0;
-    
+
     // Net difference per single unit item
     const netUnitResult = cleanSellPrice - cleanBuyPrice;
-    const formattedNetString = netUnitResult >= 0 
+    const formattedNetString = netUnitResult >= 0
       ? `$${(netUnitResult * soldNum).toLocaleString()}`
       : `-$${Math.abs(netUnitResult * soldNum).toLocaleString()}`;
 
-    let updatedProductsList;
-
-    if (editingId) {
-      updatedProductsList = products.map((prod) => {
-        if (prod.id === editingId) {
-          return {
-            ...prod,
-            name: formData.name,
-            category: formData.category,
-            buyPrice: isSalesRep ? prod.buyPrice : `$${cleanBuyPrice.toLocaleString()}`,
-            sellPrice: `$${cleanSellPrice.toLocaleString()}`,
-            inStock: stockNum,
-            stockSold: soldNum,
-            profit: isSalesRep ? prod.profit : formattedNetString,
-            status: computedStatus,
-          };
+    setIsSaving(true);
+    try {
+      if (editingId) {
+        const updates = {
+          name: formData.name,
+          category: formData.category,
+          sellPrice: `$${cleanSellPrice.toLocaleString()}`,
+          inStock: stockNum,
+          stockSold: soldNum,
+        };
+        if (!isSalesRep) {
+          updates.buyPrice = `$${cleanBuyPrice.toLocaleString()}`;
+          updates.profit = formattedNetString;
         }
-        return prod;
-      });
-    } else {
-      const newProductItem = {
-        id: Date.now().toString(),
-        name: formData.name,
-        category: formData.category,
-        buyPrice: `$${cleanBuyPrice.toLocaleString()}`,
-        sellPrice: `$${cleanSellPrice.toLocaleString()}`,
-        inStock: stockNum,
-        stockSold: soldNum,
-        profit: formattedNetString,
-        status: computedStatus,
-      };
-      updatedProductsList = [...products, newProductItem];
-    }
+        updates.status = computedStatus;
 
-    setProducts(updatedProductsList);
-    
-    if (storage.products && typeof storage.products.saveAll === 'function') {
-      storage.products.saveAll(updatedProductsList);
-    } else {
-      localStorage.setItem('trakit_products', JSON.stringify(updatedProductsList));
-    }
+        const updated = await updateProduct(editingId, updates);
+        setProducts((prev) => prev.map((prod) => (prod.id === editingId ? updated : prod)));
+      } else {
+        const created = await createProduct({
+          name: formData.name,
+          category: formData.category,
+          buyPrice: `$${cleanBuyPrice.toLocaleString()}`,
+          sellPrice: `$${cleanSellPrice.toLocaleString()}`,
+          inStock: stockNum,
+          stockSold: soldNum,
+          profit: formattedNetString,
+          status: computedStatus,
+        });
+        setProducts((prev) => [...prev, created]);
+      }
 
-    closeModal();
+      closeModal();
+    } catch (error) {
+      alert(error.message || 'Could not save product.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const closeModal = () => {
@@ -235,6 +241,12 @@ export default function ProductsPage() {
             </button>
           )}
         </div>
+
+        {loadError && (
+          <div style={{ padding: '12px 16px', background: 'rgba(220,53,69,0.1)', border: '1px solid #dc3545', borderRadius: '8px', color: '#dc3545', fontSize: '13px' }}>
+            {loadError}
+          </div>
+        )}
 
         {/* FINANCIAL SUMMARY CARDS DISPLAY BLOCK */}
         {!isSalesRep && (
@@ -369,8 +381,8 @@ export default function ProductsPage() {
 
               <div style={modalActionsStyle}>
                 <button type="button" style={cancelButtonStyle} onClick={closeModal}>Cancel</button>
-                <button type="submit" style={saveButtonStyle}>
-                  {editingId ? 'Save Updates' : 'Create Product'}
+                <button type="submit" style={saveButtonStyle} disabled={isSaving}>
+                  {isSaving ? 'Saving...' : editingId ? 'Save Updates' : 'Create Product'}
                 </button>
               </div>
 

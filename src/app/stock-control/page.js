@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { storage, findProductByName, getStockStatus, computeProfitLabel } from '@/lib/storage';
+import { findProductByName, getStockStatus, computeProfitLabel } from '@/lib/storage';
+import { fetchProducts, createProduct, updateProduct } from '@/lib/apiClient';
 import { normalizeRole } from '@/lib/roles';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
@@ -231,6 +232,9 @@ export default function StockControlPage() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showForm, setShowForm] = useState(false);
   const [userRole, setUserRole] = useState('sales_rep'); // Fallback default role
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [formData, setFormData] = useState({
     product: '',
     category: '',
@@ -238,14 +242,23 @@ export default function StockControlPage() {
     unitPrice: '',
   });
 
-  const loadProducts = () => {
-    setProducts(storage.products.getAll());
+  const loadProducts = async () => {
+    try {
+      setLoadError('');
+      const data = await fetchProducts();
+      setProducts(data);
+    } catch (error) {
+      setLoadError(error.message || 'Could not load stock from the server.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
-    // This is the single, shared stock record: it's the same storage.products
-    // list that Products, Dashboard, and Daily Reports read from — so adding
-    // stock here shows up everywhere else immediately.
+    // This is the single, shared stock record: it's the same Postgres-backed
+    // /api/products data that Products, Dashboard, and Daily Reports read
+    // from — so adding stock here shows up everywhere else, for every
+    // device/browser, immediately.
     loadProducts();
 
     try {
@@ -276,7 +289,7 @@ export default function StockControlPage() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const quantity = parseInt(formData.quantity, 10) || 0;
     const finalUnitPrice = isOwner ? (parseFloat(formData.unitPrice) || 0) : 0;
 
@@ -284,49 +297,56 @@ export default function StockControlPage() {
       return;
     }
 
-    const allProducts = storage.products.getAll();
-    const existing = findProductByName(allProducts, formData.product);
+    setIsSubmitting(true);
+    try {
+      const existing = findProductByName(products, formData.product);
 
-    if (existing) {
-      // Product is already in the stock list — just add to what's there.
-      const newInStock = (Number(existing.inStock) || 0) + quantity;
-      const updated = storage.products.update(existing.id, {
-        inStock: newInStock,
-        status: getStockStatus(newInStock),
-        profit: computeProfitLabel(existing.buyPrice, existing.sellPrice, existing.stockSold),
-      });
-      setProducts(allProducts.map((p) => (p.id === existing.id ? updated : p)));
-    } else {
-      // Brand-new product name — ask before creating it, per "add it or leave it".
-      const shouldAdd = window.confirm(
-        `"${formData.product}" isn't in your stock list yet. Add it as a new product?`
-      );
-      if (!shouldAdd) {
-        setFormData({ product: '', category: '', quantity: '', unitPrice: '' });
-        setShowForm(false);
-        return;
+      if (existing) {
+        // Product is already in the stock list — just add to what's there.
+        const newInStock = (Number(existing.inStock) || 0) + quantity;
+        const updated = await updateProduct(existing.id, {
+          inStock: newInStock,
+          status: getStockStatus(newInStock),
+          profit: computeProfitLabel(existing.buyPrice, existing.sellPrice, existing.stockSold),
+        });
+        setProducts((prev) => prev.map((p) => (p.id === existing.id ? updated : p)));
+      } else {
+        // Brand-new product name — ask before creating it, per "add it or leave it".
+        const shouldAdd = window.confirm(
+          `"${formData.product}" isn't in your stock list yet. Add it as a new product?`
+        );
+        if (!shouldAdd) {
+          setFormData({ product: '', category: '', quantity: '', unitPrice: '' });
+          setShowForm(false);
+          setIsSubmitting(false);
+          return;
+        }
+
+        const sellPrice = isOwner ? `$${finalUnitPrice.toLocaleString()}` : '$0';
+        const newProduct = await createProduct({
+          name: formData.product,
+          category: formData.category,
+          buyPrice: '$0',
+          sellPrice,
+          inStock: quantity,
+          stockSold: 0,
+          profit: computeProfitLabel('$0', sellPrice, 0),
+          status: getStockStatus(quantity),
+        });
+        setProducts((prev) => [...prev, newProduct]);
+
+        if (!isOwner) {
+          alert(`"${formData.product}" was added to stock. Ask the owner to confirm its price.`);
+        }
       }
 
-      const sellPrice = isOwner ? `$${finalUnitPrice.toLocaleString()}` : '$0';
-      const newProduct = storage.products.create({
-        name: formData.product,
-        category: formData.category,
-        buyPrice: '$0',
-        sellPrice,
-        inStock: quantity,
-        stockSold: 0,
-        profit: computeProfitLabel('$0', sellPrice, 0),
-        status: getStockStatus(quantity),
-      });
-      setProducts([...allProducts, newProduct]);
-
-      if (!isOwner) {
-        alert(`"${formData.product}" was added to stock. Ask the owner to confirm its price.`);
-      }
+      setFormData({ product: '', category: '', quantity: '', unitPrice: '' });
+      setShowForm(false);
+    } catch (error) {
+      alert(error.message || 'Could not save stock changes.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setFormData({ product: '', category: '', quantity: '', unitPrice: '' });
-    setShowForm(false);
   };
 
   return (
@@ -345,6 +365,12 @@ export default function StockControlPage() {
             + ADD STOCK
           </button>
         </div>
+
+        {loadError && (
+          <div style={{ padding: '12px 16px', background: 'rgba(220,53,69,0.1)', border: '1px solid #dc3545', borderRadius: '8px', color: '#dc3545', fontSize: '13px' }}>
+            {loadError}
+          </div>
+        )}
 
         {/* Category Filter */}
         <div style={filterButtonsStyle}>
@@ -440,8 +466,9 @@ export default function StockControlPage() {
               <button
                 style={submitButtonStyle}
                 onClick={handleSubmit}
+                disabled={isSubmitting}
               >
-                Add Entry
+                {isSubmitting ? 'Saving...' : 'Add Entry'}
               </button>
             </div>
           </div>
@@ -480,7 +507,7 @@ export default function StockControlPage() {
               ) : (
                 <tr>
                   <td colSpan={isOwner ? 6 : 5} style={{ ...tableBodyCellStyle, textAlign: 'center' }}>
-                    No stock items yet — use "+ ADD STOCK" to record your first item.
+                    {isLoading ? 'Loading stock...' : 'No stock items yet — use "+ ADD STOCK" to record your first item.'}
                   </td>
                 </tr>
               )}

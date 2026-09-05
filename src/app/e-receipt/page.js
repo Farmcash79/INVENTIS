@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { storage, findProductByName, getStockStatus, computeProfitLabel } from '@/lib/storage';
+import { findProductByName, getStockStatus, computeProfitLabel } from '@/lib/storage';
+import { fetchProducts, createProduct, updateProduct, createReceipt, api } from '@/lib/apiClient';
 import { normalizeRole } from '@/lib/roles';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
@@ -261,19 +262,19 @@ export default function EReceiptPage() {
   const visibleCategories = isSalesRep ? salesRepAllowedCategories : categories;
 
   // Applies a generated receipt's line items back onto the shared stock list
-  // (storage.products): matched items get their inStock reduced and
-  // stockSold increased; unmatched item names prompt to add them as new
-  // stock, exactly like the Stock Control page does.
-  const syncItemsToStock = (receiptItems) => {
-    let allProducts = storage.products.getAll();
+  // (the same /api/products data everyone else reads): matched items get
+  // their inStock reduced and stockSold increased; unmatched item names
+  // prompt to add them as new stock, exactly like the Stock Control page does.
+  const syncItemsToStock = async (receiptItems) => {
+    let allProducts = await fetchProducts();
 
-    receiptItems.forEach((item) => {
+    for (const item of receiptItems) {
       const existing = findProductByName(allProducts, item.description);
 
       if (existing) {
         const newInStock = Math.max(0, (Number(existing.inStock) || 0) - item.qty);
         const newStockSold = (Number(existing.stockSold) || 0) + item.qty;
-        const updated = storage.products.update(existing.id, {
+        const updated = await updateProduct(existing.id, {
           inStock: newInStock,
           stockSold: newStockSold,
           status: getStockStatus(newInStock),
@@ -284,10 +285,10 @@ export default function EReceiptPage() {
         const shouldAdd = window.confirm(
           `"${item.description}" isn't in your stock list yet. Add it as a new product?`
         );
-        if (!shouldAdd) return;
+        if (!shouldAdd) continue;
 
         const sellPrice = `$${item.unitAmount.toLocaleString()}`;
-        const created = storage.products.create({
+        const created = await createProduct({
           name: item.description,
           category: item.category,
           buyPrice: '$0',
@@ -299,7 +300,7 @@ export default function EReceiptPage() {
         });
         allProducts = [...allProducts, created];
       }
-    });
+    }
   };
 
   const handleAddItemField = () => {
@@ -383,33 +384,38 @@ export default function EReceiptPage() {
     if (customerName && customerWhatsApp && items.length > 0) {
       setIsSubmitting(true);
       try {
-        const receipt = {
-          id: String(storage.eReceipts.getAll().length + 1),
-          customerName,
-          customerWhatsApp,
-          items,
-          total: parseFloat(calculateTotal()),
-          createdAt: new Date(),
-        };
-        
-        storage.eReceipts.create(receipt);
-        syncItemsToStock(items);
+        const totalAmount = calculateTotal();
 
-        const whatsappResponse = await fetch('/api/whatsapp/send-receipt', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        await createReceipt({
+          customerName,
+          customerPhone: customerWhatsApp,
+          items,
+          totalAmount,
+        });
+
+        await syncItemsToStock(items);
+
+        let whatsappResult = null;
+        try {
+          whatsappResult = await api.post('/api/whatsapp/send-receipt', {
             phoneNumber: customerWhatsApp,
             customerName,
             items,
-            total: parseFloat(calculateTotal()),
-          }),
-        });
+            total: parseFloat(totalAmount),
+          });
+        } catch (whatsappError) {
+          console.error('WhatsApp send failed:', whatsappError);
+        }
 
-        if (whatsappResponse.ok) {
+        if (whatsappResult?.sent) {
           alert('E-Receipt generated and sent to WhatsApp successfully!');
+        } else if (whatsappResult?.whatsappLink) {
+          // No WhatsApp Business API configured — open a pre-filled chat so
+          // the receipt just needs one tap to send from your own WhatsApp.
+          window.open(whatsappResult.whatsappLink, '_blank', 'noopener,noreferrer');
+          alert('E-Receipt generated. Opening WhatsApp so you can send it — just hit send in the chat that opened.');
         } else {
-          alert('E-Receipt generated but failed to send WhatsApp. You can send it manually.');
+          alert('E-Receipt generated, but WhatsApp could not be opened. You can share it manually.');
         }
 
         setCustomerName('');
@@ -418,7 +424,7 @@ export default function EReceiptPage() {
         setNewItems([{ id: Date.now(), qty: '', description: '', category: '', amount: '' }]);
         setEditingItemId(null);
       } catch (error) {
-        alert('E-Receipt generated but error sending WhatsApp. Please try again.');
+        alert(error.message || 'Could not generate the receipt. Please try again.');
         console.error('Error:', error);
       } finally {
         setIsSubmitting(false);

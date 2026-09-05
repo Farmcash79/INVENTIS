@@ -1,48 +1,8 @@
-import fs from 'fs/promises';
-import path from 'path';
-
 let prisma = null;
-
-const fallbackStoragePath = path.join(process.cwd(), 'data', 'fallback-storage.json');
 
 const defaultUsers = [];
 const defaultProducts = [];
 const defaultExpenses = [];
-
-const defaultFallbackState = {
-  users: [],
-  products: [],
-  reports: [],
-  expenses: [],
-  receipts: [],
-  stock: [],
-};
-
-const loadFallbackState = async () => {
-  try {
-    await fs.mkdir(path.dirname(fallbackStoragePath), { recursive: true });
-    const raw = await fs.readFile(fallbackStoragePath, 'utf8');
-    const parsed = JSON.parse(raw);
-
-    return {
-      users: Array.isArray(parsed.users) ? parsed.users : [],
-      products: Array.isArray(parsed.products) ? parsed.products : [],
-      reports: Array.isArray(parsed.reports) ? parsed.reports : [],
-      expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
-      receipts: Array.isArray(parsed.receipts) ? parsed.receipts : [],
-      stock: Array.isArray(parsed.stock) ? parsed.stock : [],
-    };
-  } catch {
-    await fs.writeFile(fallbackStoragePath, JSON.stringify(defaultFallbackState, null, 2));
-    return { ...defaultFallbackState };
-  }
-};
-
-const saveFallbackState = async (state) => {
-  await fs.mkdir(path.dirname(fallbackStoragePath), { recursive: true });
-  await fs.writeFile(fallbackStoragePath, JSON.stringify(state, null, 2));
-  return state;
-};
 
 const mapProduct = (row) => ({
   ...row,
@@ -286,59 +246,63 @@ export const serverStorage = {
   expenses: {
     getAll: async () => {
       return runWithFallback(
-        async () => {
-          const state = await loadFallbackState();
-          return state.expenses;
+        async (currentPrisma) => {
+          const results = await currentPrisma.expense.findMany({ orderBy: { createdAt: 'desc' } });
+          return results.map((row) => ({ ...row, createdAt: new Date(row.createdAt) }));
         },
         []
       );
     },
     getById: async (id) => {
       return runWithFallback(
-        async () => {
-          const state = await loadFallbackState();
-          return state.expenses.find((row) => row.id === id) || null;
+        async (currentPrisma) => {
+          const row = await currentPrisma.expense.findUnique({ where: { id } });
+          return row ? { ...row, createdAt: new Date(row.createdAt) } : null;
         },
         null
       );
     },
     create: async (expense) => {
-      const created = {
-        id: String(Date.now()),
-        ...expense,
-        amount: Number(expense.amount || 0),
-        createdAt: new Date().toISOString(),
-      };
-
       return runWithFallback(
-        async () => {
-          const state = await loadFallbackState();
-          const nextState = { ...state, expenses: [...state.expenses, created] };
-          await saveFallbackState(nextState);
-          return created;
+        async (currentPrisma) => {
+          const created = await currentPrisma.expense.create({
+            data: {
+              description: expense.description,
+              category: expense.category,
+              amount: Number(expense.amount || 0),
+              date: expense.date,
+              addedByRole: expense.addedByRole || null,
+            },
+          });
+          return { ...created, createdAt: new Date(created.createdAt) };
         },
-        created
+        null
       );
     },
     update: async (id, updates) => {
       return runWithFallback(
-        async () => {
-          const state = await loadFallbackState();
-          const index = state.expenses.findIndex((row) => row.id === id);
-          if (index === -1) return null;
-          state.expenses[index] = { ...state.expenses[index], ...updates, amount: Number(updates.amount ?? state.expenses[index].amount) };
-          await saveFallbackState(state);
-          return state.expenses[index];
+        async (currentPrisma) => {
+          const existing = await currentPrisma.expense.findUnique({ where: { id } });
+          if (!existing) return null;
+          const updated = await currentPrisma.expense.update({
+            where: { id },
+            data: {
+              description: updates.description ?? existing.description,
+              category: updates.category ?? existing.category,
+              amount: Number(updates.amount ?? existing.amount),
+              date: updates.date ?? existing.date,
+              addedByRole: updates.addedByRole ?? existing.addedByRole,
+            },
+          });
+          return { ...updated, createdAt: new Date(updated.createdAt) };
         },
         null
       );
     },
     delete: async (id) => {
       return runWithFallback(
-        async () => {
-          const state = await loadFallbackState();
-          const nextState = { ...state, expenses: state.expenses.filter((row) => row.id !== id) };
-          await saveFallbackState(nextState);
+        async (currentPrisma) => {
+          await currentPrisma.expense.delete({ where: { id } });
           return true;
         },
         false
